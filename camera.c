@@ -25,6 +25,9 @@ sem_t estimation_ready; // Estimator waits on this
 // Shared queue
 CacheQueue cache;
 
+// Share temporary frame
+double* temp_frame;
+
 //Termination flag for sim. To be deleted in final implementation
 volatile int should_terminate = 0;
 
@@ -110,37 +113,38 @@ void* camera_thread(void* arg) {
 // Transformer thread - ABSTRACT PLACEHOLDER
 void* transformer_thread(void* arg) {
     printf("Transformer started\n");
-    
     while (!should_terminate) {
+        
+        //     for (int i = 0; i < FRAME_LENGTH; i++) {
+        //         printf("%f\n", temp_frame[i]);
+        //     }
+        //     pthread_exit(NULL);
+        // }
         // Wait for frame from camera
         sem_wait(&full_slots);
 
         // sim termination
         if (should_terminate && is_empty(&cache)) {
-        break;  // Exit if no more work
-            }
+            break;  // Exit if no more work
+        }
         
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
-        double* original_frame = dequeue(&cache);
-        printf("Transformer: Queue count AFTER dequeue: %d\n", cache.count);
+        temp_frame = cache.frames[cache.front];
         pthread_mutex_unlock(&queue_mutex);
         
-        if (original_frame == NULL) {
+        if (temp_frame == NULL) {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             should_terminate = 1;
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
         
-        // Signal camera that slot is free
-        sem_post(&empty_slots);
-        
         printf("Transformer: Processing frame...\n");
         
         // Compress the frame (3 seconds)
         sleep(3); // Simulate compression time
-        compression(original_frame, FRAME_SIZE);
+        temp_frame = compression(temp_frame, FRAME_SIZE);
         
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
