@@ -149,7 +149,9 @@ void *transformer_thread(void *arg)
         }
         pthread_mutex_lock(&temporary_frame_mutex);
         // Check if queue is empty
+        pthread_mutex_lock(&queue_mutex);
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&queue_mutex);
         printf("Transformer: Processing frame and goint to sleep...\n");
         // Compress the frame (3 seconds)
         sleep(3); // Simulate compression time
