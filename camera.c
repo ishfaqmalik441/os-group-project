@@ -140,33 +140,21 @@ void *transformer_thread(void *arg)
     {
         // Wait for frame from camera
         sem_wait(&full_slots);
-
-        // Get frame from queue
-        // pthread_mutex_lock(&queue_mutex);
-
-        // Check if queue is empty
         sem_wait(&est_done);
-
-        if (is_empty(&cache) || cache.frames[cache.front] == NULL)
+        if (is_empty(&cache) && should_terminate)
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
-            should_terminate = 1;
-            // pthread_mutex_unlock(&queue_mutex);
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-
         pthread_mutex_lock(&temporary_frame_mutex);
-        // Copy frame data into pre-allocated temp_frame memory
+        // Check if queue is empty
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
-        printf("Transformer: Processing frame...\n");
-
+        printf("Transformer: Processing frame and goint to sleep...\n");
         // Compress the frame (3 seconds)
-        printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
-        printf("Transformer awake after 3 seconds\n");
-
         temp_frame = compression(temp_frame, FRAME_SIZE);
+        printf("Transformer awake and completed compression.\n");
         pthread_mutex_unlock(&temporary_frame_mutex);
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
@@ -203,9 +191,13 @@ void *estimator_thread(void *arg)
 
     while (!should_terminate || !is_empty(&cache))
     {
+
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
-
+        if (is_empty(&cache) && should_terminate) {
+            printf("Estimator Exiting! Queue count: %d\n", cache.count);
+            break;
+        }
         // copy compressed frame
         pthread_mutex_lock(&temporary_frame_mutex);
         memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
