@@ -24,6 +24,7 @@ pthread_mutex_t temporary_frame_mutex;
 sem_t empty_slots;      // Camera waits on this
 sem_t full_slots;       // Transformer waits on this
 sem_t estimation_ready; // Estimator waits on this
+sem_t est_done;
 
 // Shared queue
 CacheQueue cache;
@@ -108,6 +109,7 @@ void *camera_thread(void *arg)
         sem_wait(&empty_slots);
 
         // Add to queue (protected by mutex)
+        sem_wait(&est_done);
         pthread_mutex_lock(&queue_mutex);
         enqueue(&cache, frame);
         printf("Camera: Loaded frame into cache. Queue count: %d\n", cache.count);
@@ -210,24 +212,26 @@ void *estimator_thread(void *arg)
 
     while (!should_terminate || !is_empty(&cache))
     {
-        // Wait for compressed frame from transformer
-        sem_wait(&estimation_ready);
-
+        
         if (should_terminate && is_empty(&cache))
         {
             break;
         }
+
+        // Wait for compressed frame from transformer
+        sem_wait(&estimation_ready);
+
+        // copy compressed frame
+        pthread_mutex_lock(&temporary_frame_mutex);
+        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&temporary_frame_mutex);
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
         memcpy(original, dequeue(&cache), FRAME_SIZE * sizeof(double));
         sem_post(&empty_slots);
         pthread_mutex_unlock(&queue_mutex);
-
-        // copy compressed frame
-        pthread_mutex_lock(&temporary_frame_mutex);
-        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
-        pthread_mutex_unlock(&temporary_frame_mutex);
+        sem_post(&est_done);
 
         printf("Estimator: Calculating MSE...\n");
 
@@ -263,6 +267,7 @@ int main(int argc, char *argv[])
     sem_init(&empty_slots, 0, CACHE_SIZE); // Start with all slots empty
     sem_init(&full_slots, 0, 0);           // Start with no full slots
     sem_init(&estimation_ready, 0, 0);     // Start with no frames ready for estimation
+    sem_init(&est_done, 1, 1);
 
     // Initialize queue
     init_queue(&cache);
@@ -286,6 +291,7 @@ int main(int argc, char *argv[])
     sem_destroy(&empty_slots);
     sem_destroy(&full_slots);
     sem_destroy(&estimation_ready);
+    sem_destroy(&est_done);
 
     printf("All frames processed. Program terminated.\n");
     return 0;
