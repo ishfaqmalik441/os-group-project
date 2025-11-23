@@ -147,9 +147,6 @@ void *transformer_thread(void *arg)
             break; // Exit if no more work
         }
 
-        // Get frame from queue
-        // pthread_mutex_lock(&queue_mutex);
-
         // Check if queue is empty
         if (is_empty(&cache) || cache.frames[cache.front] == NULL)
         {
@@ -164,22 +161,14 @@ void *transformer_thread(void *arg)
         pthread_mutex_lock(&temporary_frame_mutex);
         // Copy frame data into pre-allocated temp_frame memory
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
-        pthread_mutex_unlock(&temporary_frame_mutex);
         printf("Transformer: Processing frame...\n");
 
         // Compress the frame (3 seconds)
         printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
         printf("Transformer awake after 3 seconds\n");
-        sem_wait(&est_done);
-        pthread_mutex_lock(&temporary_frame_mutex);
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
-
-        // for (int i = 0; i < FRAME_SIZE; i++) {
-        //     printf("%f\n", temp_frame[i]);
-        // }
-
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
