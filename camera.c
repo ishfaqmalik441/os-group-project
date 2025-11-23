@@ -128,7 +128,8 @@ void *camera_thread(void *arg)
 void *transformer_thread(void *arg)
 {
     printf("Transformer started\n");
-    while (!should_terminate) {
+    while (!should_terminate)
+    {
         // Wait for frame from camera
         sem_wait(&full_slots);
 
@@ -160,21 +161,41 @@ void *transformer_thread(void *arg)
         printf("Transformer awake after 3 seconds\n");
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
-                
-        for (int i = 0; i < FRAME_SIZE; i++) {
+
+        for (int i = 0; i < FRAME_SIZE; i++)
+        {
             printf("%f\n", temp_frame[i]);
         }
-        
+
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
     return NULL;
 }
 
+double calculate_mse(double *original, double *compressed, int length)
+{
+    double mse = 0.0;
+    for (int i = 0; i < length; i++)
+    {
+        double diff = original[i] - compressed[i];
+        mse += diff * diff;
+    }
+    mse /= length;
+    return mse;
+}
+
 // Estimator thread - ABSTRACT PLACEHOLDER
 void *estimator_thread(void *arg)
 {
     printf("Estimator started\n");
+    double *compressed = malloc(FRAME_SIZE * sizeof(double));
+    double *original = malloc(FRAME_SIZE * sizeof(double));
+    if (!compressed || !original)
+    {
+        perror("malloc");
+        return NULL; // or handle error
+    }
 
     while (!should_terminate)
     {
@@ -188,39 +209,30 @@ void *estimator_thread(void *arg)
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
-        double *original = dequeue(&cache);
+        memcpy(original, dequeue(&cache), FRAME_SIZE * sizeof(double));
         sem_post(&empty_slots);
         pthread_mutex_unlock(&queue_mutex);
-        
 
         // copy compressed frame
-        pthread_mutex_lock(&queue_mutex);
-        double *compressed = malloc(sizeof(double));
-        if (!compressed)
-        {
-            perror("malloc");
-            return NULL; // or handle error
-        }
-        memcpy(compressed, temp_frame, sizeof(double));
-        pthread_mutex_unlock(&queue_mutex);
+        pthread_mutex_lock(&temporary_frame_mutex);
+        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&temporary_frame_mutex);
 
         printf("Estimator: Calculating MSE...\n");
 
         // Calculate MSE (placeholder)
-        double mse = 0.001; // Example value
+        for (int i = 0; i < FRAME_SIZE; i++)
+        {
+            printf("Original[%d]=%f, Compressed[%d]=%f\n", i, original[i], i, compressed[i]);
+        }
+        double mse = calculate_mse(original, compressed, FRAME_SIZE);
         printf("mse = %f\n", mse);
 
         printf("Estimator: MSE calculated. Queue count: %d\n", cache.count);
-
-        free(compressed);
-        free(original);
-
-        // In real implementation, you would:
-        // 1. Calculate actual MSE between original and compressed
-        // 2. Delete original frame from cache
-        // 3. Print the MSE value
     }
-
+    free(original);
+    free(compressed);
+    
     return NULL;
 }
 
