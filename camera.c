@@ -179,6 +179,7 @@ void *transformer_thread(void *arg)
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
+    free(temp_frame);
     printf("Transformer: Exiting.\n");
     return NULL;
 }
