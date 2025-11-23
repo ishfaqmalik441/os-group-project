@@ -125,8 +125,8 @@ void *camera_thread(void *arg)
     return NULL;
 }
 
-// Transformer thread - ABSTRACT PLACEHOLDER
-void *transformer_thread(void *arg)
+// Transformer thread
+void *transformer_thread()
 {
     printf("Transformer started\n");
     // Allocate temp_frame memory once (reused throughout program)
@@ -149,7 +149,9 @@ void *transformer_thread(void *arg)
         }
         pthread_mutex_lock(&temporary_frame_mutex);
         // Check if queue is empty
+        pthread_mutex_lock(&queue_mutex);
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&queue_mutex);
         printf("Transformer: Processing frame and goint to sleep...\n");
         // Compress the frame (3 seconds)
         sleep(3); // Simulate compression time
@@ -178,7 +180,7 @@ double calculate_mse(double *original, double *compressed, int length)
 }
 
 // Estimator thread
-void *estimator_thread(void *arg)
+void *estimator_thread()
 {
     printf("Estimator started\n");
     double *compressed = malloc(FRAME_SIZE * sizeof(double));
@@ -194,7 +196,8 @@ void *estimator_thread(void *arg)
 
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
-        if (is_empty(&cache) && should_terminate) {
+        if (is_empty(&cache) && should_terminate)
+        {
             printf("Estimator Exiting! Queue count: %d\n", cache.count);
             break;
         }
@@ -242,6 +245,11 @@ int main(int argc, char *argv[])
     }
 
     int interval = atoi(argv[1]);
+    if (interval <= 0)
+    {
+        printf("Interval must be a positive integer.\n");
+        return 1;
+    }
 
     // Initialize synchronization primitives
     pthread_mutex_init(&queue_mutex, NULL);
