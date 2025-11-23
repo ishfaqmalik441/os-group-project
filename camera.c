@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <string.h>
 
 #define CACHE_SIZE 5
 #define FRAME_SIZE 8
@@ -186,7 +187,7 @@ void *estimator_thread(void *arg)
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
-        double *original = queue_dequeue(&cache);
+        double *original = dequeue(&cache);
         sem_post(&empty_slots);
         pthread_mutex_unlock(&queue_mutex);
         
@@ -197,7 +198,7 @@ void *estimator_thread(void *arg)
         if (!compressed)
         {
             perror("malloc");
-            return; // or handle error
+            return NULL; // or handle error
         }
         memcpy(compressed, temp_frame, sizeof(double));
         pthread_mutex_unlock(&queue_mutex);
