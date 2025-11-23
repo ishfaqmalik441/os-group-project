@@ -136,7 +136,7 @@ void *transformer_thread()
         perror("malloc for temp_frame");
         return NULL;
     }
-    while (!should_terminate || !is_empty(&cache))
+    while (1)
     {
         // Wait for frame from camera
         sem_wait(&full_slots);
@@ -152,7 +152,7 @@ void *transformer_thread()
         pthread_mutex_lock(&queue_mutex);
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
         pthread_mutex_unlock(&queue_mutex);
-        printf("Transformer: Processing frame and goint to sleep...\n");
+        printf("Transformer: Processing frame and going to sleep...\n");
         // Compress the frame (3 seconds)
         sleep(3); // Simulate compression time
         temp_frame = compression(temp_frame, FRAME_SIZE);
@@ -191,7 +191,7 @@ void *estimator_thread()
         return NULL;
     }
 
-    while (!should_terminate || !is_empty(&cache))
+    while (1)
     {
 
         // Wait for compressed frame from transformer
