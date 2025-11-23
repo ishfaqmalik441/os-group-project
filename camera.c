@@ -141,15 +141,20 @@ void *transformer_thread()
         // Wait for frame from camera
         sem_wait(&full_slots);
         sem_wait(&est_done);
+
+        pthread_mutex_lock(&temporary_frame_mutex);
+        // Check if queue is empty
+        pthread_mutex_lock(&queue_mutex);
         if (is_empty(&cache) && should_terminate)
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             sem_post(&estimation_ready); // Wake estimator to exit too
+            pthread_mutex_unlock(&queue_mutex);
+            pthread_mutex_unlock(&temporary_frame_mutex);
             break;
         }
-        pthread_mutex_lock(&temporary_frame_mutex);
-        // Check if queue is empty
-        pthread_mutex_lock(&queue_mutex);
+
+
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
         pthread_mutex_unlock(&queue_mutex);
         printf("Transformer: Processing frame and going to sleep...\n");
@@ -193,30 +198,29 @@ void *estimator_thread()
 
     while (1)
     {
-
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
-        if (is_empty(&cache) && should_terminate)
-        {
-            printf("Estimator Exiting! Queue count: %d\n", cache.count);
-            break;
-        }
-        // copy compressed frame
-        pthread_mutex_lock(&temporary_frame_mutex);
-        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
-        pthread_mutex_unlock(&temporary_frame_mutex);
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
         if (should_terminate && is_empty(&cache))
         {
             printf("Estimator: Queue empty and no more frames. Exiting.\n");
+            pthread_mutex_unlock(&queue_mutex);
+            sem_post(&est_done);
             break;
         }
+        
         memcpy(original, dequeue(&cache), FRAME_SIZE * sizeof(double));
         sem_post(&empty_slots);
         pthread_mutex_unlock(&queue_mutex);
         sem_post(&est_done);
+
+        // copy compressed frame
+        pthread_mutex_lock(&temporary_frame_mutex);
+        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&temporary_frame_mutex);
+
 
         printf("Estimator: Calculating MSE...\n");
 
