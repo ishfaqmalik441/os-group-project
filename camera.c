@@ -128,6 +128,13 @@ void *camera_thread(void *arg)
 void *transformer_thread(void *arg)
 {
     printf("Transformer started\n");
+    // Allocate temp_frame memory once (reused throughout program)
+    temp_frame = malloc(FRAME_SIZE * sizeof(double));
+    if (!temp_frame)
+    {
+        perror("malloc for temp_frame");
+        return NULL;
+    }
     while (!should_terminate) {
         // Wait for frame from camera
         sem_wait(&full_slots);
@@ -140,18 +147,21 @@ void *transformer_thread(void *arg)
 
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
-        pthread_mutex_lock(&temporary_frame_mutex);
-        temp_frame = cache.frames[cache.front];
-        pthread_mutex_unlock(&queue_mutex);
-
-        if (temp_frame == NULL)
+        
+        // Check if queue is empty
+        if (is_empty(&cache) || cache.frames[cache.front] == NULL)
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             should_terminate = 1;
+            pthread_mutex_unlock(&queue_mutex);
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-
+        
+        pthread_mutex_lock(&temporary_frame_mutex);
+        // Copy frame data into pre-allocated temp_frame memory
+        memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
+        pthread_mutex_unlock(&queue_mutex);
         printf("Transformer: Processing frame...\n");
 
         // Compress the frame (3 seconds)
@@ -160,10 +170,10 @@ void *transformer_thread(void *arg)
         printf("Transformer awake after 3 seconds\n");
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
-                
-        for (int i = 0; i < FRAME_SIZE; i++) {
-            printf("%f\n", temp_frame[i]);
-        }
+
+        // for (int i = 0; i < FRAME_SIZE; i++) {
+        //     printf("%f\n", temp_frame[i]);
+        // }
         
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
@@ -257,6 +267,7 @@ int main(int argc, char *argv[])
     pthread_join(estimator_tid, NULL);
 
     // Cleanup
+    free(temp_frame);
     pthread_mutex_destroy(&queue_mutex);
     pthread_mutex_destroy(&temporary_frame_mutex);
     sem_destroy(&empty_slots);
