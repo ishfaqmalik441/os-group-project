@@ -8,8 +8,9 @@
 #define FRAME_SIZE 8
 
 // Queue structure
-typedef struct {
-    double* frames[CACHE_SIZE];
+typedef struct
+{
+    double *frames[CACHE_SIZE];
     int front;
     int rear;
     int count;
@@ -19,102 +20,115 @@ typedef struct {
 // Synchronization primitives
 pthread_mutex_t queue_mutex;
 sem_t empty_slots;      // Camera waits on this
-sem_t full_slots;       // Transformer waits on this  
+sem_t full_slots;       // Transformer waits on this
 sem_t estimation_ready; // Estimator waits on this
 
 // Shared queue
 CacheQueue cache;
 
 // Share temporary frame
-double* temp_frame;
+double *temp_frame;
 
-//Termination flag for sim. To be deleted in final implementation
+// Termination flag for sim. To be deleted in final implementation
 volatile int should_terminate = 0;
 
 // Provided functions (extern declarations)
-extern double* generate_frame_vector(int l);
-extern double* compression(double* frame, int length);
+extern double *generate_frame_vector(int l);
+extern double *compression(double *frame, int length);
 
 // Queue operations
-void init_queue(CacheQueue* q) {
+void init_queue(CacheQueue *q)
+{
     q->front = 0;
     q->rear = 0;
     q->count = 0;
     q->size = CACHE_SIZE;
-    for (int i = 0; i < CACHE_SIZE; i++) {
+    for (int i = 0; i < CACHE_SIZE; i++)
+    {
         q->frames[i] = NULL;
     }
 }
 
-int is_full(CacheQueue* q) {
+int is_full(CacheQueue *q)
+{
     return q->count == q->size;
 }
 
-int is_empty(CacheQueue* q) {
+int is_empty(CacheQueue *q)
+{
     return q->count == 0;
 }
 
-void enqueue(CacheQueue* q, double* frame) {
-    if (is_full(q)) return;
+void enqueue(CacheQueue *q, double *frame)
+{
+    if (is_full(q))
+        return;
     q->frames[q->rear] = frame;
     q->rear = (q->rear + 1) % q->size;
     q->count++;
 }
 
-double* dequeue(CacheQueue* q) {
-    if (is_empty(q)) return NULL;
-    double* frame = q->frames[q->front];
+double *dequeue(CacheQueue *q)
+{
+    if (is_empty(q))
+        return NULL;
+    double *frame = q->frames[q->front];
     q->front = (q->front + 1) % q->size;
     q->count--;
     return frame;
 }
 
 // Camera thread - COMPLETE IMPLEMENTATION
-void* camera_thread(void* arg) {
-    int interval = *((int*)arg);
+void *camera_thread(void *arg)
+{
+    int interval = *((int *)arg);
     printf("Camera started with interval %d seconds\n", interval);
-    
-    while (1) {
+
+    while (1)
+    {
         // Generate frame
-        double* frame = generate_frame_vector(FRAME_SIZE);
-        
+        double *frame = generate_frame_vector(FRAME_SIZE);
+
         // Check for termination
-        if (frame == NULL) {
+        if (frame == NULL)
+        {
             printf("Camera: No more frames. Exiting.\n");
             should_terminate = 1;
-    
+
             // Signal threads to wake up and check termination
-            sem_post(&full_slots);        // Wake transformer
-            sem_post(&estimation_ready);  // Wake estimator
+            sem_post(&full_slots);       // Wake transformer
+            sem_post(&estimation_ready); // Wake estimator
 
             break;
         }
-        
+
         // Wait for empty slot in cache
         sem_wait(&empty_slots);
-        
+
         // Add to queue (protected by mutex)
         pthread_mutex_lock(&queue_mutex);
         enqueue(&cache, frame);
         printf("Camera: Loaded frame into cache. Queue count: %d\n", cache.count);
         pthread_mutex_unlock(&queue_mutex);
-        
+
         // Signal transformer that frame is available
         sem_post(&full_slots);
-        
+
         // Simulate camera loading time
         sleep(interval);
     }
-    
+
     // Signal termination to other threads (you might need additional logic here)
     return NULL;
 }
 
 // Transformer thread - ABSTRACT PLACEHOLDER
-void* transformer_thread(void* arg) {
+void *transformer_thread(void *arg)
+{
     printf("Transformer started\n");
-    while (!should_terminate) {
-        
+    while (!should_terminate)
+    {
+
         //     for (int i = 0; i < FRAME_LENGTH; i++) {
         //         printf("%f\n", temp_frame[i]);
         //     }
@@ -124,99 +138,127 @@ void* transformer_thread(void* arg) {
         sem_wait(&full_slots);
 
         // sim termination
-        if (should_terminate && is_empty(&cache)) {
-            break;  // Exit if no more work
+        if (should_terminate && is_empty(&cache))
+        {
+            break; // Exit if no more work
         }
-        
+
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
         temp_frame = cache.frames[cache.front];
         pthread_mutex_unlock(&queue_mutex);
-        
-        if (temp_frame == NULL) {
+
+        if (temp_frame == NULL)
+        {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             should_terminate = 1;
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-        
+
         printf("Transformer: Processing frame...\n");
-        
+
         // Compress the frame (3 seconds)
         sleep(3); // Simulate compression time
         temp_frame = compression(temp_frame, FRAME_SIZE);
-        
+
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
-    
+
     return NULL;
 }
 
-// Estimator thread - ABSTRACT PLACEHOLDER  
-void* estimator_thread(void* arg) {
+// Estimator thread - ABSTRACT PLACEHOLDER
+void *estimator_thread(void *arg)
+{
     printf("Estimator started\n");
-    
-    while (!should_terminate) {
+
+    while (!should_terminate)
+    {
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
 
-        if (should_terminate) {
-        break;
-    }
+        if (should_terminate)
+        {
+            break;
+        }
+
+        // consume original frame from cache
+        pthread_mutex_lock(&queue_mutex);
+        double *original = queue_dequeue(&cache);
+        sem_post(&empty_slots);
+        pthread_mutex_unlock(&queue_mutex);
         
+
+        // copy compressed frame
+        pthread_mutex_lock(&queue_mutex);
+        double *compressed = malloc(sizeof(double));
+        if (!compressed)
+        {
+            perror("malloc");
+            return; // or handle error
+        }
+        memcpy(compressed, temp_frame, sizeof(double));
+        pthread_mutex_unlock(&queue_mutex);
+
         printf("Estimator: Calculating MSE...\n");
-        
+
         // Calculate MSE (placeholder)
         double mse = 0.001; // Example value
         printf("mse = %f\n", mse);
 
         printf("Estimator: MSE calculated. Queue count: %d\n", cache.count);
-        
+
+        free(compressed);
+        free(original);
+
         // In real implementation, you would:
         // 1. Calculate actual MSE between original and compressed
         // 2. Delete original frame from cache
         // 3. Print the MSE value
     }
-    
+
     return NULL;
 }
 
-int main(int argc, char* argv[]) {
-    if (argc != 2) {
+int main(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
         printf("Usage: %s <interval>\n", argv[0]);
         return 1;
     }
-    
+
     int interval = atoi(argv[1]);
-    
+
     // Initialize synchronization primitives
     pthread_mutex_init(&queue_mutex, NULL);
     sem_init(&empty_slots, 0, CACHE_SIZE); // Start with all slots empty
     sem_init(&full_slots, 0, 0);           // Start with no full slots
     sem_init(&estimation_ready, 0, 0);     // Start with no frames ready for estimation
-    
+
     // Initialize queue
     init_queue(&cache);
-    
+
     // Create threads
     pthread_t camera_tid, transformer_tid, estimator_tid;
-    
+
     pthread_create(&camera_tid, NULL, camera_thread, &interval);
     pthread_create(&transformer_tid, NULL, transformer_thread, NULL);
     pthread_create(&estimator_tid, NULL, estimator_thread, NULL);
-    
+
     // Wait for threads to complete
     pthread_join(camera_tid, NULL);
-    pthread_join(transformer_tid, NULL); 
+    pthread_join(transformer_tid, NULL);
     pthread_join(estimator_tid, NULL);
-    
+
     // Cleanup
     pthread_mutex_destroy(&queue_mutex);
     sem_destroy(&empty_slots);
     sem_destroy(&full_slots);
     sem_destroy(&estimation_ready);
-    
+
     printf("All frames processed. Program terminated.\n");
     return 0;
 }
