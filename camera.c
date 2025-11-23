@@ -159,7 +159,8 @@ void *transformer_thread(void *arg)
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-
+        
+        sem_wait(&est_done);
         pthread_mutex_lock(&temporary_frame_mutex);
         // Copy frame data into pre-allocated temp_frame memory
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
