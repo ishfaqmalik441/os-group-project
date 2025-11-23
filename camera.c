@@ -109,7 +109,6 @@ void *camera_thread(void *arg)
         sem_wait(&empty_slots);
 
         // Add to queue (protected by mutex)
-        sem_wait(&est_done);
         pthread_mutex_lock(&queue_mutex);
         enqueue(&cache, frame);
         printf("Camera: Loaded frame into cache. Queue count: %d\n", cache.count);
@@ -149,14 +148,14 @@ void *transformer_thread(void *arg)
         }
 
         // Get frame from queue
-        pthread_mutex_lock(&queue_mutex);
+        // pthread_mutex_lock(&queue_mutex);
 
         // Check if queue is empty
         if (is_empty(&cache) || cache.frames[cache.front] == NULL)
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             should_terminate = 1;
-            pthread_mutex_unlock(&queue_mutex);
+            // pthread_mutex_unlock(&queue_mutex);
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
@@ -164,13 +163,15 @@ void *transformer_thread(void *arg)
         pthread_mutex_lock(&temporary_frame_mutex);
         // Copy frame data into pre-allocated temp_frame memory
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
-        pthread_mutex_unlock(&queue_mutex);
+        pthread_mutex_unlock(&temporary_frame_mutex);
         printf("Transformer: Processing frame...\n");
 
         // Compress the frame (3 seconds)
         printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
         printf("Transformer awake after 3 seconds\n");
+        sem_wait(&est_done);
+        pthread_mutex_lock(&temporary_frame_mutex);
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
 
