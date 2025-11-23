@@ -141,16 +141,12 @@ void *transformer_thread(void *arg)
         // Wait for frame from camera
         sem_wait(&full_slots);
 
-        // sim termination
-        if (should_terminate && is_empty(&cache))
-        {
-            break; // Exit if no more work
-        }
-
         // Get frame from queue
         // pthread_mutex_lock(&queue_mutex);
 
         // Check if queue is empty
+        sem_wait(&est_done);
+
         if (is_empty(&cache) || cache.frames[cache.front] == NULL)
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
@@ -159,20 +155,17 @@ void *transformer_thread(void *arg)
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-        
-        sem_wait(&est_done);
+
         pthread_mutex_lock(&temporary_frame_mutex);
         // Copy frame data into pre-allocated temp_frame memory
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
-        pthread_mutex_unlock(&temporary_frame_mutex);
         printf("Transformer: Processing frame...\n");
 
         // Compress the frame (3 seconds)
         printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
         printf("Transformer awake after 3 seconds\n");
-        sem_wait(&est_done);
-        pthread_mutex_lock(&temporary_frame_mutex);
+
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
 
@@ -183,6 +176,7 @@ void *transformer_thread(void *arg)
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
+
     free(temp_frame);
     printf("Transformer: Exiting.\n");
     return NULL;
@@ -214,12 +208,6 @@ void *estimator_thread(void *arg)
 
     while (!should_terminate || !is_empty(&cache))
     {
-        
-        if (should_terminate && is_empty(&cache))
-        {
-            break;
-        }
-
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
 
@@ -230,6 +218,11 @@ void *estimator_thread(void *arg)
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
+        if (should_terminate && is_empty(&cache))
+        {
+            printf("Estimator: Queue empty and no more frames. Exiting.\n");
+            break;
+        }
         memcpy(original, dequeue(&cache), FRAME_SIZE * sizeof(double));
         sem_post(&empty_slots);
         pthread_mutex_unlock(&queue_mutex);
