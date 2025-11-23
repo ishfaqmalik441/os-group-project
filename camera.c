@@ -135,7 +135,8 @@ void *transformer_thread(void *arg)
         perror("malloc for temp_frame");
         return NULL;
     }
-    while (!should_terminate) {
+    while (!should_terminate || !is_empty(&cache))
+    {
         // Wait for frame from camera
         sem_wait(&full_slots);
 
@@ -147,7 +148,7 @@ void *transformer_thread(void *arg)
 
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
-        
+
         // Check if queue is empty
         if (is_empty(&cache) || cache.frames[cache.front] == NULL)
         {
@@ -157,7 +158,7 @@ void *transformer_thread(void *arg)
             sem_post(&estimation_ready); // Wake estimator to exit too
             break;
         }
-        
+
         pthread_mutex_lock(&temporary_frame_mutex);
         // Copy frame data into pre-allocated temp_frame memory
         memcpy(temp_frame, cache.frames[cache.front], FRAME_SIZE * sizeof(double));
@@ -174,10 +175,11 @@ void *transformer_thread(void *arg)
         // for (int i = 0; i < FRAME_SIZE; i++) {
         //     printf("%f\n", temp_frame[i]);
         // }
-        
+
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
+    printf("Transformer: Exiting.\n");
     return NULL;
 }
 
@@ -193,7 +195,7 @@ double calculate_mse(double *original, double *compressed, int length)
     return mse;
 }
 
-// Estimator thread - ABSTRACT PLACEHOLDER
+// Estimator thread
 void *estimator_thread(void *arg)
 {
     printf("Estimator started\n");
@@ -202,15 +204,15 @@ void *estimator_thread(void *arg)
     if (!compressed || !original)
     {
         perror("malloc");
-        return NULL; // or handle error
+        return NULL;
     }
 
-    while (!should_terminate)
+    while (!should_terminate || !is_empty(&cache))
     {
         // Wait for compressed frame from transformer
         sem_wait(&estimation_ready);
 
-        if (should_terminate)
+        if (should_terminate && is_empty(&cache))
         {
             break;
         }
@@ -240,7 +242,7 @@ void *estimator_thread(void *arg)
     }
     free(original);
     free(compressed);
-    
+    printf("Estimator: Exiting.\n");
     return NULL;
 }
 
