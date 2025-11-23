@@ -20,6 +20,7 @@ typedef struct
 
 // Synchronization primitives
 pthread_mutex_t queue_mutex;
+pthread_mutex_t temporary_frame_mutex;
 sem_t empty_slots;      // Camera waits on this
 sem_t full_slots;       // Transformer waits on this
 sem_t estimation_ready; // Estimator waits on this
@@ -127,14 +128,7 @@ void *camera_thread(void *arg)
 void *transformer_thread(void *arg)
 {
     printf("Transformer started\n");
-    while (!should_terminate)
-    {
-
-        //     for (int i = 0; i < FRAME_LENGTH; i++) {
-        //         printf("%f\n", temp_frame[i]);
-        //     }
-        //     pthread_exit(NULL);
-        // }
+    while (!should_terminate) {
         // Wait for frame from camera
         sem_wait(&full_slots);
 
@@ -146,6 +140,7 @@ void *transformer_thread(void *arg)
 
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
+        pthread_mutex_lock(&temporary_frame_mutex);
         temp_frame = cache.frames[cache.front];
         pthread_mutex_unlock(&queue_mutex);
 
@@ -160,13 +155,19 @@ void *transformer_thread(void *arg)
         printf("Transformer: Processing frame...\n");
 
         // Compress the frame (3 seconds)
+        printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
+        printf("Transformer awake after 3 seconds\n");
         temp_frame = compression(temp_frame, FRAME_SIZE);
-
+        pthread_mutex_unlock(&temporary_frame_mutex);
+                
+        for (int i = 0; i < FRAME_SIZE; i++) {
+            printf("%f\n", temp_frame[i]);
+        }
+        
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
-
     return NULL;
 }
 
@@ -235,6 +236,7 @@ int main(int argc, char *argv[])
 
     // Initialize synchronization primitives
     pthread_mutex_init(&queue_mutex, NULL);
+    pthread_mutex_init(&temporary_frame_mutex, NULL);
     sem_init(&empty_slots, 0, CACHE_SIZE); // Start with all slots empty
     sem_init(&full_slots, 0, 0);           // Start with no full slots
     sem_init(&estimation_ready, 0, 0);     // Start with no frames ready for estimation
@@ -256,6 +258,7 @@ int main(int argc, char *argv[])
 
     // Cleanup
     pthread_mutex_destroy(&queue_mutex);
+    pthread_mutex_destroy(&temporary_frame_mutex);
     sem_destroy(&empty_slots);
     sem_destroy(&full_slots);
     sem_destroy(&estimation_ready);
