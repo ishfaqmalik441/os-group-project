@@ -125,10 +125,11 @@ void* transformer_thread(void* arg) {
         
         // Get frame from queue
         pthread_mutex_lock(&queue_mutex);
-        double* frame = cache.frames[cache.front];
+        pthread_mutex_lock(&temporary_frame_mutex);
+        temp_frame = cache.frames[cache.front];
         pthread_mutex_unlock(&queue_mutex);
         
-        if (frame == NULL) {
+        if (temp_frame == NULL) {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             should_terminate = 1;
             sem_post(&estimation_ready); // Wake estimator to exit too
@@ -141,8 +142,7 @@ void* transformer_thread(void* arg) {
         printf("Transformer sleeping...\n");
         sleep(3); // Simulate compression time
         printf("Transformer awake after 3 seconds\n");
-        pthread_mutex_lock(&temporary_frame_mutex);
-        temp_frame = compression(frame, FRAME_SIZE);
+        temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
                 
         for (int i = 0; i < FRAME_SIZE; i++) {
