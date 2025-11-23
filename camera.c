@@ -168,11 +168,6 @@ void *transformer_thread(void *arg)
 
         temp_frame = compression(temp_frame, FRAME_SIZE);
         pthread_mutex_unlock(&temporary_frame_mutex);
-
-        // for (int i = 0; i < FRAME_SIZE; i++) {
-        //     printf("%f\n", temp_frame[i]);
-        // }
-
         // Signal estimator that frame is ready for MSE
         sem_post(&estimation_ready);
     }
