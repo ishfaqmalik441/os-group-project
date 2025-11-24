@@ -4,6 +4,7 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #define CACHE_SIZE 5
 #define FRAME_SIZE 8
@@ -32,8 +33,8 @@ CacheQueue cache;
 // Share temporary frame
 double *temp_frame;
 
-// Termination flag for sim. To be deleted in final implementation
-volatile int should_terminate = 0;
+// Termination flag (atomic) for safe thread access
+atomic_int should_terminate = ATOMIC_VAR_INIT(0);
 
 // Provided functions (extern declarations)
 extern double *generate_frame_vector(int l);
@@ -76,9 +77,11 @@ double *dequeue(CacheQueue *q)
     if (is_empty(q))
         return NULL;
     double *frame = q->frames[q->front];
+    q->frames[q->front] = NULL;  // Remove from queue
     q->front = (q->front + 1) % q->size;
     q->count--;
-    return frame;
+    return frame;  // Give to caller
+
 }
 
 // Camera thread - COMPLETE IMPLEMENTATION
@@ -96,7 +99,7 @@ void *camera_thread(void *arg)
         if (frame == NULL)
         {
             printf("Camera: No more frames. Exiting.\n");
-            should_terminate = 1;
+            atomic_store(&should_terminate, 1);
 
             // Signal threads to wake up and check termination
             sem_post(&full_slots);       // Wake transformer
@@ -145,7 +148,7 @@ void *transformer_thread()
         pthread_mutex_lock(&temporary_frame_mutex);
         // Check if queue is empty
         pthread_mutex_lock(&queue_mutex);
-        if (is_empty(&cache) && should_terminate)
+        if (is_empty(&cache) && atomic_load(&should_terminate))
         {
             printf("Transformer: Queue empty and no more frames. Exiting.\n");
             sem_post(&estimation_ready); // Wake estimator to exit too
@@ -167,7 +170,6 @@ void *transformer_thread()
         sem_post(&estimation_ready);
     }
 
-    free(temp_frame);
     printf("Transformer: Exiting.\n");
     return NULL;
 }
@@ -203,7 +205,7 @@ void *estimator_thread()
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
-        if (should_terminate && is_empty(&cache))
+        if (atomic_load(&should_terminate) && is_empty(&cache))
         {
             printf("Estimator: Queue empty and no more frames. Exiting.\n");
             pthread_mutex_unlock(&queue_mutex);
@@ -211,9 +213,20 @@ void *estimator_thread()
             break;
         }
         
-        memcpy(original, dequeue(&cache), FRAME_SIZE * sizeof(double));
-        sem_post(&empty_slots);
+        double *frame_ptr = dequeue(&cache);
+        if (frame_ptr == NULL) {
+            /* nothing to consume (race/termination) */
+            pthread_mutex_unlock(&queue_mutex);
+            sem_post(&est_done);
+            continue;
+        }
         pthread_mutex_unlock(&queue_mutex);
+
+
+        /* copy and free the heap buffer produced by generate_frame_vector() */
+        memcpy(original, frame_ptr, FRAME_SIZE * sizeof(double));
+        free(frame_ptr);
+        sem_post(&empty_slots);
         sem_post(&est_done);
 
         // copy compressed frame
@@ -224,11 +237,12 @@ void *estimator_thread()
 
         printf("Estimator: Calculating MSE...\n");
 
-        // Calculate MSE (placeholder)
+        /*
         for (int i = 0; i < FRAME_SIZE; i++)
         {
             printf("Original[%d]=%f, Compressed[%d]=%f\n", i, original[i], i, compressed[i]);
         }
+        */
         double mse = calculate_mse(original, compressed, FRAME_SIZE);
         printf("mse = %f\n", mse);
 
@@ -261,7 +275,8 @@ int main(int argc, char *argv[])
     sem_init(&empty_slots, 0, CACHE_SIZE); // Start with all slots empty
     sem_init(&full_slots, 0, 0);           // Start with no full slots
     sem_init(&estimation_ready, 0, 0);     // Start with no frames ready for estimation
-    sem_init(&est_done, 1, 1);
+    /* pshared = 0 for semaphores used between threads in same process */
+    sem_init(&est_done, 0, 1);
 
     // Initialize queue
     init_queue(&cache);
