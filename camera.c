@@ -246,7 +246,12 @@ void *estimator_thread()
         double mse = calculate_mse(original, compressed, FRAME_SIZE);
         printf("mse = %f\n", mse);
 
-        printf("Estimator: MSE calculated. Queue count: %d\n", cache.count);
+        /* read queue count under lock to avoid data race reported by Helgrind */
+        int qcount;
+        pthread_mutex_lock(&queue_mutex);
+        qcount = cache.count;
+        pthread_mutex_unlock(&queue_mutex);
+        printf("Estimator: MSE calculated. Queue count: %d\n", qcount);
     }
     free(original);
     free(compressed);

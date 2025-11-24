@@ -1,0 +1,34 @@
+MEMORY LEAK FIXES:
+
+temp_frame = malloc(FRAME_SIZE * sizeof(double)); in transformer // Prevents uninitialized memory access
+
+free(frame_ptr); in estimator after memcpy // Frees frames from generate_frame_vector()
+
+free(original); free(compressed); in estimator cleanup // Frees local allocations
+
+free(temp_frame); in main cleanup // Frees transformer's allocation
+
+RACE CONDITION FIXES:
+
+pthread_mutex_t temporary_frame_mutex; // Protects shared temp_frame between threads
+
+atomic_int should_terminate = ATOMIC_VAR_INIT(0); // Thread-safe termination flag
+
+sem_init(&est_done, 0, 1); // Coordinates transformer-estimator handoff
+
+sem_post(&empty_slots); in estimator after frame consumption // Proper cache slot management
+
+pthread_mutex_lock(&queue_mutex); qcount = cache.count; pthread_mutex_unlock(&queue_mutex); // Prevents data race on cache.count
+
+memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double)); instead of pointer assignment // Prevents concurrent memory access
+
+All queue operations protected by pthread_mutex_lock(&queue_mutex) // Thread-safe queue access
+
+FLOW CONTROL FIXES:
+
+sem_wait(&est_done); in transformer before processing // Ensures estimator is ready
+
+sem_post(&est_done); in estimator after consumption // Signals transformer to proceed
+
+Termination checks with atomic_load(&should_terminate) under mutex protection // Safe shutdown detection
+
