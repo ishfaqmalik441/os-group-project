@@ -1,1 +1,2 @@
-# os-group-project
+# Camera frame quantization and de-quantization
+This program uses a multithreading model to concurrently generate and compress camera frames. It achieves synchronization between multiple threads using semaphores and mutexes. It also calculates the Mean-Squared-Error (MSE) of each frame compression.
