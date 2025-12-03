@@ -1,3 +1,8 @@
+// Names - eids - Student IDs:
+// MALIK Muhammad Ishfaq Zubair - mizmalik2 - 57088876
+// KAPYA Zachariah Muya - (add your eid here) - 58494409
+// TURKHUU Khongorzul - (add your eid here) - 58046281
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -173,6 +178,7 @@ void *transformer_thread()
     return NULL; // Terminate the thread
 }
 
+// Function to calculate the mean squared error
 double calculate_mse(double *original, double *compressed, int length)
 {
     double mse = 0.0;
@@ -189,8 +195,8 @@ double calculate_mse(double *original, double *compressed, int length)
 void *estimator_thread()
 {
     printf("Estimator started\n");
-    double *compressed = malloc(FRAME_SIZE * sizeof(double));
-    double *original = malloc(FRAME_SIZE * sizeof(double));
+    double *compressed = malloc(FRAME_SIZE * sizeof(double)); // allocate memory for a local buffer to hold the compressed frames
+    double *original = malloc(FRAME_SIZE * sizeof(double)); // allocate memory for a local buffer to hold the original frames from the cache
     if (!compressed || !original)
     {
         perror("malloc");
@@ -204,58 +210,60 @@ void *estimator_thread()
 
         // consume original frame from cache
         pthread_mutex_lock(&queue_mutex);
-        if (atomic_load(&should_terminate) && is_empty(&cache))
+        if (atomic_load(&should_terminate) && is_empty(&cache)) // check for termination and if the queue is empty
         {
             printf("Estimator: Queue empty and no more frames. Exiting.\n");
-            pthread_mutex_unlock(&queue_mutex);
-            sem_post(&est_done);
+            pthread_mutex_unlock(&queue_mutex); // release the lock on the queue
+            sem_post(&est_done); // signal the transformer to exit, if it has not yet exited
             break;
         }
         
-        double *frame_ptr = dequeue(&cache);
+        double *frame_ptr = dequeue(&cache); // dequeue the frame
         if (frame_ptr == NULL) {
             /* nothing to consume (race/termination) */
-            pthread_mutex_unlock(&queue_mutex);
-            sem_post(&est_done);
+            pthread_mutex_unlock(&queue_mutex); // release the lock on the queue
+            sem_post(&est_done); // signal the transformer to exit, if it has not yet exited
             continue;
         }
         pthread_mutex_unlock(&queue_mutex);
 
 
         /* copy and free the heap buffer produced by generate_frame_vector() */
-        memcpy(original, frame_ptr, FRAME_SIZE * sizeof(double));
-        free(frame_ptr);
-        sem_post(&empty_slots);
-        sem_post(&est_done);
+        memcpy(original, frame_ptr, FRAME_SIZE * sizeof(double)); // copy the frame into a local buffer
+        free(frame_ptr); // free the memory allocated
+        sem_post(&empty_slots); // signal the camera to fill a new slot
+        sem_post(&est_done); // signal the transformer to proceed if it is waiting on the estimator to copy the compressed frame from the temporary buffer into its local buffer
 
         // copy compressed frame
-        pthread_mutex_lock(&temporary_frame_mutex);
-        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double));
+        pthread_mutex_lock(&temporary_frame_mutex); // acquire the lock on the temporary buffer
+        memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double)); // copy the compressed frame from the temporary buffer into a local buffer
         pthread_mutex_unlock(&temporary_frame_mutex);
 
 
         printf("Estimator: Calculating MSE...\n");
 
+        // should remove this commented out block, not doing it right now in case you guys still need it.
         /*
         for (int i = 0; i < FRAME_SIZE; i++)
         {
             printf("Original[%d]=%f, Compressed[%d]=%f\n", i, original[i], i, compressed[i]);
         }
         */
-        double mse = calculate_mse(original, compressed, FRAME_SIZE);
+        double mse = calculate_mse(original, compressed, FRAME_SIZE); // calculate the mean squared error
         printf("mse = %f\n", mse);
 
+        // should probably the remove the comment below too, also is checking the queue count necessary?
         /* read queue count under lock to avoid data race reported by Helgrind */
         int qcount;
         pthread_mutex_lock(&queue_mutex);
-        qcount = cache.count;
+        qcount = cache.count; // checking the queue count after calculating the MSE
         pthread_mutex_unlock(&queue_mutex);
         printf("Estimator: MSE calculated. Queue count: %d\n", qcount);
     }
-    free(original);
-    free(compressed);
+    free(original); // free the memory allocated
+    free(compressed); // free the memory allocated
     printf("Estimator: Exiting.\n");
-    return NULL;
+    return NULL; // terminate the thread
 }
 
 int main(int argc, char *argv[])
@@ -288,23 +296,23 @@ int main(int argc, char *argv[])
     // Create the threads
     pthread_t camera_tid, transformer_tid, estimator_tid;
 
-    pthread_create(&camera_tid, NULL, camera_thread, &interval);
-    pthread_create(&transformer_tid, NULL, transformer_thread, NULL);
-    pthread_create(&estimator_tid, NULL, estimator_thread, NULL);
+    pthread_create(&camera_tid, NULL, camera_thread, &interval); // create the camera thread
+    pthread_create(&transformer_tid, NULL, transformer_thread, NULL); // create the transformer thread
+    pthread_create(&estimator_tid, NULL, estimator_thread, NULL); // create the estimator thread
 
     // Wait for the threads to complete
-    pthread_join(camera_tid, NULL);
-    pthread_join(transformer_tid, NULL);
-    pthread_join(estimator_tid, NULL);
+    pthread_join(camera_tid, NULL); // wait for the camera thread to complete
+    pthread_join(transformer_tid, NULL); // wait for the transformer thread to complete
+    pthread_join(estimator_tid, NULL); // wait for the estimator thread to complete
 
     // Cleanup all semaphores, mutexes and temporary buffer
-    free(temp_frame);
-    pthread_mutex_destroy(&queue_mutex);
-    pthread_mutex_destroy(&temporary_frame_mutex);
-    sem_destroy(&empty_slots);
-    sem_destroy(&full_slots);
-    sem_destroy(&estimation_ready);
-    sem_destroy(&est_done);
+    free(temp_frame); // free the memory allocated for the temporary buffer
+    pthread_mutex_destroy(&queue_mutex); // destroy the mutex on the queue
+    pthread_mutex_destroy(&temporary_frame_mutex); // destroy the mutex on the temporary buffer
+    sem_destroy(&empty_slots); // destroy the semaphore on the empty slots
+    sem_destroy(&full_slots); // destroy the semaphore on the full slots
+    sem_destroy(&estimation_ready); // destroy the semaphore on the frames ready for estimation
+    sem_destroy(&est_done); // destroy the semaphore on the estimator to finish copying the frame from the temporary buffer into its local buffer
 
     printf("All frames processed. Program terminated.\n");
     return 0;

@@ -1,24 +1,23 @@
 Program:: output (camera / transformer / estimator multi-threaded simulation)
 Main source file:: 57088876_58494409_58046281.c (include any other helper .c/.cpp files in the same directory)
-Build instructions
 
+Build instructions:
 Compiler command:: gcc -g -pthread -o output *.c -lm
 Notes:: Requires POSIX threads (use on Linux/WSL/macOS). The -lm flag links the math library if used by helper code.
-Usage
 
+Usage:
 Run:: ./output <interval>
 Example:: ./output 2
 Argument:: <interval> is the camera frame generation interval in seconds (positive integer).
 If run without args:: program prints usage: Usage: ./output <interval>
 
-What the program does
-
+What the program does:
 Camera thread:: generates frames periodically (every <interval> seconds) until generate_frame_vector() returns NULL (end of input), then signals termination.
 Transformer thread:: takes frames from a bounded cache, compresses them (simulated using sleep(3)), and places the compressed frame into a temporary buffer for estimation.
 Estimator thread:: reads the original frame and the compressed frame, computes the mean squared error (MSE) and prints it.
 Synchronization:: the program uses mutexes and semaphores to coordinate access to the cache and temporary buffer. Cache size is 5; each frame length is 8 in this implementation.
-Example output (trimmed)
 
+Example output (trimmed):
 The program prints runtime messages from all threads. A sample run (./output 2) produces lines similar to:
 Camera started with interval 2 seconds
 Camera: Loaded frame into cache. Queue count: 1
@@ -37,14 +36,14 @@ Estimator: Queue empty and no more frames. Exiting.
 All frames processed. Program terminated.
 
 Note: exact mse values and ordering of interleaved messages depend on scheduling and random/functional behavior of generate_frame_vector() and compression().
-Interpreting common lines
 
+Interpreting common lines:
 Camera: Loaded frame into cache. Queue count: N: camera successfully enqueued a frame; N is the number of frames currently in the cache.
 Transformer: Processing frame and going to sleep... and Transformer awake and completed compression.: transformer simulates compression (sleep), then writes compressed data to the temporary buffer.
 Estimator: Calculating MSE... and mse = <value>: estimator computes mean squared error between the original and compressed frames and prints the numeric result.
 No more frames. Exiting. / Queue empty and no more frames. Exiting.: graceful termination sequence when the camera finished producing frames and the pipeline has drained.
-Platform / run notes
 
+Platform / run notes:
 Run the build and program in a Unix-like environment (Linux or WSL on Windows) because the program uses pthread and POSIX semaphores.
 Use -g for debugging symbols (optional). Remove -g for a release build.
 If you see odd interleavings or repeated messages near termination, that is due to thread scheduling and the program's signaling behavior when the camera stops producing frames.
