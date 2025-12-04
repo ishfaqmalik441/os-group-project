@@ -1,6 +1,6 @@
 // Names - eids - Student IDs:
 // MALIK Muhammad Ishfaq Zubair - mizmalik2 - 57088876
-// KAPYA Zachariah Muya - (add your eid here) - 58494409
+// KAPYA Zachariah Muya - zmkapya2 - 58494409
 // TURKHUU Khongorzul - (add your eid here) - 58046281
 
 #include <stdio.h>
@@ -232,23 +232,18 @@ void *estimator_thread()
         memcpy(original, frame_ptr, FRAME_SIZE * sizeof(double)); // copy the frame into a local buffer
         free(frame_ptr); // free the memory allocated
         sem_post(&empty_slots); // signal the camera to fill a new slot
-        sem_post(&est_done); // signal the transformer to proceed if it is waiting on the estimator to copy the compressed frame from the temporary buffer into its local buffer
+       
 
         // copy compressed frame
         pthread_mutex_lock(&temporary_frame_mutex); // acquire the lock on the temporary buffer
         memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double)); // copy the compressed frame from the temporary buffer into a local buffer
         pthread_mutex_unlock(&temporary_frame_mutex);
 
+         sem_post(&est_done); // signal the transformer to proceed if it is waiting on the estimator to copy the compressed frame from the temporary buffer into its local buffer
+
 
         printf("Estimator: Calculating MSE...\n");
 
-        // should remove this commented out block, not doing it right now in case you guys still need it.
-        /*
-        for (int i = 0; i < FRAME_SIZE; i++)
-        {
-            printf("Original[%d]=%f, Compressed[%d]=%f\n", i, original[i], i, compressed[i]);
-        }
-        */
         double mse = calculate_mse(original, compressed, FRAME_SIZE); // calculate the mean squared error
         printf("mse = %f\n", mse);
 
