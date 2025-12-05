@@ -1,7 +1,7 @@
 // Names - eids - Student IDs:
 // MALIK Muhammad Ishfaq Zubair - mizmalik2 - 57088876
 // KAPYA Zachariah Muya - zmkapya2 - 58494409
-// TURKHUU Khongorzul - (add your eid here) - 58046281
+// TURKHUU Khongorzul - tkhongorz2 - 58046281
 
 #include <stdio.h>
 #include <stdlib.h>
