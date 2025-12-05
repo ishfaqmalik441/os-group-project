@@ -60,31 +60,31 @@ void init_queue(CacheQueue *q)
 
 int is_full(CacheQueue *q)
 {
-    return q->count == q->size;
+    return q->count == q->size; // returns the true if full, false otherwise
 }
 
 int is_empty(CacheQueue *q)
 {
-    return q->count == 0;
+    return q->count == 0; // returns the true if empty, false otherwise
 }
 
 void enqueue(CacheQueue *q, double *frame)
 {
     if (is_full(q))
-        return;
-    q->frames[q->rear] = frame;
-    q->rear = (q->rear + 1) % q->size;
-    q->count++;
+        return; // if the queue is full, do not enqueue anything
+    q->frames[q->rear] = frame; // enqueue the frame at the end of the queue
+    q->rear = (q->rear + 1) % q->size; // increment the end pointer
+    q->count++; // increment the queue count
 }
 
 double *dequeue(CacheQueue *q)
 {
     if (is_empty(q))
-        return NULL;
-    double *frame = q->frames[q->front];
-    q->frames[q->front] = NULL;  // Remove from queue
-    q->front = (q->front + 1) % q->size;
-    q->count--;
+        return NULL; // if the queue is empty, then returns NULL
+    double *frame = q->frames[q->front]; // get the frame from the front
+    q->frames[q->front] = NULL;  // Remove the frame from the front
+    q->front = (q->front + 1) % q->size; // increment the front pointer to have a new front
+    q->count--; // decrement the queue count
     return frame;  // Return the dequeued frame to the caller
 
 }
@@ -92,7 +92,7 @@ double *dequeue(CacheQueue *q)
 // Camera thread - COMPLETE IMPLEMENTATION
 void *camera_thread(void *arg)
 {
-    int interval = *((int *)arg);
+    int interval = *((int *)arg); // get the interval from the argument
     printf("Camera started with interval %d seconds\n", interval);
 
     while (1)
@@ -101,7 +101,7 @@ void *camera_thread(void *arg)
         double *frame = generate_frame_vector(FRAME_SIZE);
 
         // Check if all frames are generated and then terminate
-        if (frame == NULL)
+        if (frame == NULL) // if the frame is NULL, generate_frame_vector has finished generating frames
         {
             printf("Camera: No more frames. Exiting.\n");
             atomic_store(&should_terminate, 1); // Atomic operation on the thread-safe termination flag
@@ -138,7 +138,7 @@ void *transformer_thread()
     printf("Transformer started\n");
     // Allocate memory for temp_frame only once in the start
     temp_frame = malloc(FRAME_SIZE * sizeof(double));
-    if (!temp_frame)
+    if (!temp_frame) // if the memory allocation fails, then terminate thread
     {
         perror("malloc for temp_frame");
         return NULL;
@@ -197,7 +197,7 @@ void *estimator_thread()
     printf("Estimator started\n");
     double *compressed = malloc(FRAME_SIZE * sizeof(double)); // allocate memory for a local buffer to hold the compressed frames
     double *original = malloc(FRAME_SIZE * sizeof(double)); // allocate memory for a local buffer to hold the original frames from the cache
-    if (!compressed || !original)
+    if (!compressed || !original) // if the memory allocation fails, then terminate thread
     {
         perror("malloc");
         return NULL;
@@ -219,7 +219,7 @@ void *estimator_thread()
         }
         
         double *frame_ptr = dequeue(&cache); // dequeue the frame
-        if (frame_ptr == NULL) {
+        if (frame_ptr == NULL) { // if NULL is returned from the dequeue then the queue is empty, hence we terminate the thread
             /* nothing to consume (race/termination) */
             pthread_mutex_unlock(&queue_mutex); // release the lock on the queue
             sem_post(&est_done); // signal the transformer to exit, if it has not yet exited
@@ -239,7 +239,7 @@ void *estimator_thread()
         memcpy(compressed, temp_frame, FRAME_SIZE * sizeof(double)); // copy the compressed frame from the temporary buffer into a local buffer
         pthread_mutex_unlock(&temporary_frame_mutex);
 
-         sem_post(&est_done); // signal the transformer to proceed if it is waiting on the estimator to copy the compressed frame from the temporary buffer into its local buffer
+        sem_post(&est_done); // signal the transformer to proceed if it is waiting on the estimator to copy the compressed frame from the temporary buffer into its local buffer
 
 
         printf("Estimator: Calculating MSE...\n");
@@ -270,15 +270,15 @@ int main(int argc, char *argv[])
     }
 
     int interval = atoi(argv[1]);
-    if (interval <= 0)
+    if (interval <= 0) // if the interval argument is not greater than or equal to 0, then exit
     {
         printf("Interval must be a positive integer.\n");
         return 1;
     }
 
     // Initialize synchronization primitives
-    pthread_mutex_init(&queue_mutex, NULL);
-    pthread_mutex_init(&temporary_frame_mutex, NULL);
+    pthread_mutex_init(&queue_mutex, NULL); // initialize the queue mutex
+    pthread_mutex_init(&temporary_frame_mutex, NULL); // initialize the temporary frame buffer mutex
     sem_init(&empty_slots, 0, CACHE_SIZE); // Start with all slots empty
     sem_init(&full_slots, 0, 0);           // Start with no full slots
     sem_init(&estimation_ready, 0, 0);     // Start with no frames ready for estimation
