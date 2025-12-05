@@ -254,6 +254,8 @@ void *estimator_thread()
         qcount = cache.count; // checking the queue count after calculating the MSE
         pthread_mutex_unlock(&queue_mutex);
         printf("Estimator: MSE calculated. Queue count: %d\n", qcount);
+        //qcount mainly to see if queue is being accesed properly, as opposed to waiting till all full or all empty
+        // hence confirming proper synchronization between threads 
     }
     free(original); // free the memory allocated
     free(compressed); // free the memory allocated
