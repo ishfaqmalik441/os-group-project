@@ -247,15 +247,9 @@ void *estimator_thread()
         double mse = calculate_mse(original, compressed, FRAME_SIZE); // calculate the mean squared error
         printf("mse = %f\n", mse);
 
-        // should probably the remove the comment below too, also is checking the queue count necessary?
-        /* read queue count under lock to avoid data race reported by Helgrind */
-        int qcount;
-        pthread_mutex_lock(&queue_mutex);
-        qcount = cache.count; // checking the queue count after calculating the MSE
-        pthread_mutex_unlock(&queue_mutex);
-        printf("Estimator: MSE calculated. Queue count: %d\n", qcount);
-        //qcount mainly to see if queue is being accesed properly, as opposed to waiting till all full or all empty
-        // hence confirming proper synchronization between threads 
+        
+        printf("Estimator: MSE calculated.\n");
+         
     }
     free(original); // free the memory allocated
     free(compressed); // free the memory allocated

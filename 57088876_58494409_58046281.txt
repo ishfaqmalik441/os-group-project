@@ -20,15 +20,15 @@ Synchronization:: the program uses mutexes and semaphores to coordinate access t
 Example output (trimmed):
 The program prints runtime messages from all threads. A sample run (./output 2) produces lines similar to:
 Camera started with interval 2 seconds
-Camera: Loaded frame into cache. Queue count: 1
+Camera: Loaded frame into cache. 
 Transformer started
 Estimator started
 Transformer: Processing frame and going to sleep...
-Camera: Loaded frame into cache. Queue count: 2
+Camera: Loaded frame into cache. 
 Transformer awake and completed compression.
 Estimator: Calculating MSE...
 mse = 0.000541
-Estimator: MSE calculated. Queue count: 1
+Estimator: MSE calculated.
 ... (more processing and MSE lines) ...
 Camera: No more frames. Exiting.
 Transformer: Queue empty and no more frames. Exiting.
